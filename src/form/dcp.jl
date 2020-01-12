@@ -254,6 +254,13 @@ function variable_active_branch_flow(pm::AbstractAPLossLessModels; nw::Int=pm.cn
     p_expr = Dict{Any,Any}( ((l,i,j), p[(l,i,j)]) for (l,i,j) in ref(pm, nw, :arcs_from) )
     p_expr = merge(p_expr, Dict( ((l,j,i), -1.0*p[(l,i,j)]) for (l,i,j) in ref(pm, nw, :arcs_from)))
     var(pm, nw, cnd)[:p] = p_expr
+
+    for (l,i,j) in ref(pm, nw, :arcs_from)
+        sol(pm, nw, cnd, :branch, l)[:pf] = p_expr[(l,i,j)]
+    end
+    for (l,i,j) in ref(pm, nw, :arcs_to)
+        sol(pm, nw, cnd, :branch, l)[:pt] = p_expr[(l,i,j)]
+    end
 end
 
 ""

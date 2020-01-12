@@ -14,6 +14,7 @@ InfrastructureModels.@def pm_fields begin
     ref::Dict{Symbol,<:Any}
     var::Dict{Symbol,<:Any}
     con::Dict{Symbol,<:Any}
+    sol::Dict{Symbol,<:Any}
     cnw::Int
     ccnd::Int
 
@@ -38,12 +39,15 @@ function InitializePowerModel(PowerModel::Type, data::Dict{String,<:Any}; ext = 
 
     var = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
     con = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
+    sol = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
     for (nw_id, nw) in ref[:nw]
         nw_var = var[:nw][nw_id] = Dict{Symbol,Any}()
         nw_con = con[:nw][nw_id] = Dict{Symbol,Any}()
+        nw_sol = sol[:nw][nw_id] = Dict{Symbol,Any}()
 
         nw_var[:cnd] = Dict{Int,Any}()
         nw_con[:cnd] = Dict{Int,Any}()
+        nw_sol[:cnd] = Dict{Int,Any}()
 
         if !haskey(nw, :conductors)
             nw[:conductor_ids] = 1:1
@@ -54,6 +58,7 @@ function InitializePowerModel(PowerModel::Type, data::Dict{String,<:Any}; ext = 
         for cnd_id in nw[:conductor_ids]
             nw_var[:cnd][cnd_id] = Dict{Symbol,Any}()
             nw_con[:cnd][cnd_id] = Dict{Symbol,Any}()
+            nw_sol[:cnd][cnd_id] = Dict{Symbol,Any}()
         end
     end
 
@@ -68,6 +73,7 @@ function InitializePowerModel(PowerModel::Type, data::Dict{String,<:Any}; ext = 
         ref,
         var,
         con,
+        sol,
         cnw,
         ccnd,
         ext
@@ -133,6 +139,23 @@ con(pm::AbstractPowerModel, nw::Int, cnd::Int, key::Symbol, idx) = pm.con[:nw][n
 con(pm::AbstractPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd) = pm.con[:nw][nw][:cnd][cnd]
 con(pm::AbstractPowerModel, key::Symbol; nw::Int=pm.cnw, cnd::Int=pm.ccnd) = pm.con[:nw][nw][:cnd][cnd][key]
 con(pm::AbstractPowerModel, key::Symbol, idx; nw::Int=pm.cnw, cnd::Int=pm.ccnd) = pm.con[:nw][nw][:cnd][cnd][key][idx]
+
+
+""
+sol(pm::AbstractPowerModel, nw::Int, args...) = _sol(pm.sol[:nw][nw], args...)
+sol(pm::AbstractPowerModel, nw::Int, cnd::Int, args...) = _sol(pm.sol[:nw][nw][:cnd][cnd], args...)
+sol(pm::AbstractPowerModel, args...; nw::Int=pm.cnw, cnd::Int=pm.ccnd) = _sol(pm.sol[:nw][nw][:cnd][cnd], args...)
+
+function _sol(sol::Dict, args...)
+    for arg in args
+        if haskey(sol, arg)
+            sol = sol[arg]
+        else
+            sol = sol[arg] = Dict()
+        end
+    end
+    return sol
+end
 
 
 ""

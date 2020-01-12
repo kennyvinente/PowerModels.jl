@@ -1,4 +1,161 @@
 ""
+function _populate_values!(var::Dict)
+    tmp = Dict{String,Any}()
+    for (key, val) in var
+        tmp[string(key)] = _populate_values!(val)
+    end
+    return tmp
+end
+
+""
+function _populate_values!(var::JuMP.VariableRef)
+    return JuMP.value(var)
+end
+
+""
+function _populate_values!(var::JuMP.GenericAffExpr)
+    return JuMP.value(var)
+end
+
+""
+function _populate_values!(var::Any)
+    Memento.warn(_LOGGER, "_populate_values found unknown type $(typeof(var))")
+    return var
+end
+
+
+
+function post_processor_bus!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+function post_processor_load!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+function post_processor_gen!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+function post_processor_storage!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+function post_processor_switch!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+function post_processor_branch!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+function post_processor_dcline!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp)
+    # do nothing
+end
+
+
+function post_processor_bus!(pm::AbstractWModels, n::Int, c::Int, sol_comp)
+    sol_comp["va"] = sqrt(sol_comp["w"])
+end
+
+
+"TODO rename build_solution -> build_result; build_solution_only -> build_solution"
+function build_solution_only(pm::AbstractPowerModel; post_processors=[], comp_post_processors=Dict{String,Vector}())
+    # TODO @assert that the model is solved
+
+    sol = _populate_values!(pm.sol)
+
+    for (nw_id,nw_ref) in nws(pm)
+        sol_nw = sol["nw"]["$(nw_id)"]
+
+        for cnd_id in conductor_ids(pm)
+            sol_nw_cnd = sol_nw["cnd"]["$(cnd_id)"]
+            if haskey(sol_nw_cnd, "bus")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["bus"]
+                    post_processor_bus!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "load")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["load"]
+                    post_processor_load!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "shunt")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["shunt"]
+                    post_processor_shunt!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "gen")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["gen"]
+                    post_processor_gen!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "storage")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["storage"]
+                    post_processor_storage!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "switch")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["switch"]
+                    post_processor_switch!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "branch")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["branch"]
+                    post_processor_branch!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            if haskey(sol_nw_cnd, "dcline")
+                for (comp_key_sol, comp_sol) in sol_nw_cnd["dcline"]
+                    post_processor_dcline!(pm, nw_id, cnd_id, comp_sol)
+                end
+            end
+            for (key,val) in sol_nw_cnd
+                if haskey(comp_post_processors, key)
+                    post_processor_comp = comp_post_processors[key]
+                    for (comp_key_sol, comp_sol) in sol_nw_cnd[key]
+                        post_processor_comp(pm, nw_id, cnd_id, comp_sol)
+                    end
+                end
+            end
+        end
+    end
+
+    for post_processor in post_processors
+        post_processor(pm, sol)
+    end
+
+
+    for (nw,nw_data) in sol["nw"]
+        if ismulticonductor(pm, parse(Int, nw))
+            @assert(false) #TODO
+        else
+            sol["nw"][nw] = nw_data["cnd"]["$(pm.ccnd)"]
+        end
+    end
+
+    if !ismultinetwork(pm)
+        for (k,v) in sol["nw"]["$(pm.cnw)"]
+            sol[k] = v
+        end
+        delete!(sol, "nw")
+    end
+
+    # result = Dict{String,Any}(
+    #     "solver_name" => JuMP.solver_name(pm.model),
+    #     "termination_status" => JuMP.termination_status(pm.model),
+    #     "primal_status" => JuMP.primal_status(pm.model),
+    #     "dual_status" => JuMP.dual_status(pm.model),
+    #     "objective" => _guard_objective_value(pm.model),
+    #     "objective_lb" => _guard_objective_bound(pm.model),
+    #     "solve_time" => solve_time,
+    #     "solution" => sol,
+    # )
+
+    return sol
+end
+
+""
 function build_solution(pm::AbstractPowerModel, solve_time; solution_builder=solution_opf!)
     # TODO @assert that the model is solved
 
