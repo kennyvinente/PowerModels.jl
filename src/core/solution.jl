@@ -1,3 +1,154 @@
+pm_var_comp_name = Dict(
+    :va => "bus",
+    :vm => "bus",
+    :pg => "gen",
+    :qg => "gen",
+    :p => "branch",
+    :q => "branch",
+)
+
+pm_var_comp_id = Dict{Symbol,Any}()
+pm_var_comp_id[:p] = (idx) -> string(idx[1])
+pm_var_comp_id[:q] = (idx) -> string(idx[1])
+#pm_var_comp_id[:vm] = (idx) -> string(idx)
+
+
+""
+function _populate_values!(var::Dict)
+    tmp = Dict{String,Any}()
+    for (key, val) in var
+        if isa(val, JuMP.Containers.DenseAxisArray) && haskey(pm_var_comp_name, key)
+            #println("$key")
+            if !haskey(tmp, pm_var_comp_name[key])
+                tmp[pm_var_comp_name[key]] = Dict{String,Any}()
+            end
+            comp_dict = tmp[pm_var_comp_name[key]]
+            for array_key in keys(val)
+                if haskey(pm_var_comp_id, key)
+                    id = pm_var_comp_id[key](array_key[1])
+                else
+                    id = string(array_key[1])
+                end
+                if !haskey(comp_dict, id)
+                    comp_dict[id] = Dict{String,Any}()
+                end
+                comp = comp_dict[id]
+
+                #@assert(!haskey(comp, string(key)))
+                comp[string(key)] = JuMP.value(val[array_key])
+            end
+        else
+            tmp[string(key)] = _populate_values!(val)
+        end
+    end
+    return tmp
+end
+
+""
+function _populate_values!(var::JuMP.Containers.DenseAxisArray{<:Any,1,<:Any,<:Any})
+    tmp = Dict{String,Any}()
+    for key in keys(var)
+        key_string = _key_to_string(key)
+        val = var[key]
+        tmp[key_string] = _populate_values!(val)
+    end
+    return tmp
+end
+
+""
+function _populate_values!(var::JuMP.VariableRef)
+    return JuMP.value(var)
+end
+
+""
+function _populate_values!(var::Any)
+    #println(typeof(var))
+    return var
+end
+
+""
+function _key_to_string(key::JuMP.Containers.DenseAxisArrayKey{<:Tuple{Any}})
+    return string(key[1])
+end
+
+
+""
+function build_result(pm::AbstractPowerModel, solve_time; solution_builder=solution_opf!)
+    # TODO @assert that the model is solved
+
+    sol = Dict{String,Any}(k => pm.data[k] for k in ["per_unit"])
+    sol = _populate_values!(pm.var)
+
+    #var(pm::AbstractPowerModel, nw::Int, cnd::Int, key::Symbol, idx) = pm.var[:nw][nw][:cnd][cnd][key][idx]
+    # println(pm.var)
+    # for (nw,network) in pm.var
+    #     nw_sol = sol[string(nw)] = Dict{String,Any}()
+    #     for (cnd,conductor) in network
+    #         cnd_sol = nw_sol[string(cnd)] = Dict{String,Any}()
+    #         #println(conductor)
+    #         for (vid,terms) in conductor
+    #             var_sol = cnd_sol[string(vid)] = Dict{String,Any}()
+    #             #println(terms)
+    #             for (idx,term) in terms
+    #                 var_sol[string(idx)] = JuMP.value(term)
+    #             end
+    #         end
+    #     end
+    # end
+
+
+    # if InfrastructureModels.ismultinetwork(pm.data)
+    #     sol["multinetwork"] = true
+    #     sol_nws = sol["nw"] = Dict{String,Any}()
+    #     data_nws = data["nw"] = Dict{String,Any}()
+
+    #     for (n,nw_data) in pm.data["nw"]
+    #         sol_nw = sol_nws[n] = Dict{String,Any}()
+    #         sol_nw["baseMVA"] = nw_data["baseMVA"]
+    #         if haskey(nw_data, "conductors")
+    #             sol_nw["conductors"] = nw_data["conductors"]
+    #         end
+    #         pm.cnw = parse(Int, n)
+    #         solution_builder(pm, sol_nw)
+    #         data_nws[n] = Dict(
+    #             "name" => get(nw_data, "name", "anonymous"),
+    #             "bus_count" => length(nw_data["bus"]),
+    #             "branch_count" => length(nw_data["branch"])
+    #         )
+    #     end
+    # else
+    #     sol["baseMVA"] = pm.data["baseMVA"]
+    #     if haskey(pm.data, "conductors")
+    #         sol["conductors"] = pm.data["conductors"]
+    #     end
+    #     solution_builder(pm, sol)
+    #     data["bus_count"] = length(pm.data["bus"])
+    #     data["branch_count"] = length(pm.data["branch"])
+    # end
+
+    if InfrastructureModels.ismultinetwork(pm.data)
+    end
+
+    result = Dict{String,Any}(
+        "solver_name" => JuMP.solver_name(pm.model),
+        "termination_status" => JuMP.termination_status(pm.model),
+        "primal_status" => JuMP.primal_status(pm.model),
+        "dual_status" => JuMP.dual_status(pm.model),
+        "objective" => _guard_objective_value(pm.model),
+        "objective_lb" => _guard_objective_bound(pm.model),
+        "solve_time" => solve_time,
+        "solution" => sol,
+        # "machine" => Dict(
+        #     "cpu" => Sys.cpu_info()[1].model,
+        #     "memory" => string(Sys.total_memory()/2^30, " Gb")
+        #     ),
+        # "data" => data
+    )
+
+    return result
+end
+
+
 ""
 function build_solution(pm::AbstractPowerModel, solve_time; solution_builder=solution_opf!)
     # TODO @assert that the model is solved
