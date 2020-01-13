@@ -130,7 +130,13 @@ function variable_voltage_magnitude_sqr(pm::AbstractPowerModel; nw::Int=pm.cnw, 
     for i in ids(pm, nw, :bus)
         sol(pm, nw, cnd, :bus, i)[:w] = w[i]
     end
+    sol_post(pm, nw, cnd, :bus)[:w] = sol_post_processor_w!
 end
+
+function sol_post_processor_w!(pm::AbstractPowerModel, n::Int, c::Int, sol_comp::Dict{String,<:Any})
+    sol_comp["va"] = sqrt(sol_comp["w"])
+end
+
 
 "variable: `0 <= w_fr[l] <= buses[branches[l][\"f_bus\"]][\"vmax\"]^2` for `l` in `branch`es"
 function variable_voltage_magnitude_sqr_from_on_off(pm::AbstractPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
@@ -620,18 +626,26 @@ function variable_active_storage(pm::AbstractPowerModel; nw::Int=pm.cnw, cnd::In
             JuMP.set_upper_bound(ps[i], inj_ub[i])
         end
     end
+
+    for i in ids(pm, nw, :storage)
+        sol(pm, nw, cnd, :storage, i)[:ps] = ps[i]
+    end
 end
 
 ""
 function variable_reactive_storage(pm::AbstractPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
     inj_lb, inj_ub = ref_calc_storage_injection_bounds(ref(pm, nw, :storage), ref(pm, nw, :bus), cnd)
 
-    var(pm, nw, cnd)[:qs] = JuMP.@variable(pm.model,
+    qs = var(pm, nw, cnd)[:qs] = JuMP.@variable(pm.model,
         [i in ids(pm, nw, :storage)], base_name="$(nw)_$(cnd)_qs",
         lower_bound = max(inj_lb[i], ref(pm, nw, :storage, i, "qmin", cnd)),
         upper_bound = min(inj_ub[i], ref(pm, nw, :storage, i, "qmax", cnd)),
         start = comp_start_value(ref(pm, nw, :storage, i), "qs_start", cnd)
     )
+
+    for i in ids(pm, nw, :storage)
+        sol(pm, nw, cnd, :storage, i)[:qs] = qs[i]
+    end
 end
 
 "do nothing by default but some formulations require this"
@@ -641,12 +655,16 @@ end
 
 ""
 function variable_storage_energy(pm::AbstractPowerModel; nw::Int=pm.cnw)
-    var(pm, nw)[:se] = JuMP.@variable(pm.model,
+    se = var(pm, nw)[:se] = JuMP.@variable(pm.model,
         [i in ids(pm, nw, :storage)], base_name="$(nw)_se",
         lower_bound = 0,
         upper_bound = ref(pm, nw, :storage, i, "energy_rating"),
         start = comp_start_value(ref(pm, nw, :storage, i), "se_start", 1)
     )
+
+    for i in ids(pm, nw, :storage)
+        sol(pm, nw, :storage, i)[:se] = se[i]
+    end
 end
 
 ""

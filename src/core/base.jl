@@ -14,7 +14,10 @@ InfrastructureModels.@def pm_fields begin
     ref::Dict{Symbol,<:Any}
     var::Dict{Symbol,<:Any}
     con::Dict{Symbol,<:Any}
+
     sol::Dict{Symbol,<:Any}
+    sol_post::Dict{Symbol,<:Any}
+
     cnw::Int
     ccnd::Int
 
@@ -40,14 +43,17 @@ function InitializePowerModel(PowerModel::Type, data::Dict{String,<:Any}; ext = 
     var = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
     con = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
     sol = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
+    sol_post = Dict{Symbol,Any}(:nw => Dict{Int,Any}())
     for (nw_id, nw) in ref[:nw]
         nw_var = var[:nw][nw_id] = Dict{Symbol,Any}()
         nw_con = con[:nw][nw_id] = Dict{Symbol,Any}()
         nw_sol = sol[:nw][nw_id] = Dict{Symbol,Any}()
+        nw_sol_post = sol_post[:nw][nw_id] = Dict{Symbol,Any}()
 
         nw_var[:cnd] = Dict{Int,Any}()
         nw_con[:cnd] = Dict{Int,Any}()
         nw_sol[:cnd] = Dict{Int,Any}()
+        nw_sol_post[:cnd] = Dict{Int,Any}()
 
         if !haskey(nw, :conductors)
             nw[:conductor_ids] = 1:1
@@ -59,6 +65,7 @@ function InitializePowerModel(PowerModel::Type, data::Dict{String,<:Any}; ext = 
             nw_var[:cnd][cnd_id] = Dict{Symbol,Any}()
             nw_con[:cnd][cnd_id] = Dict{Symbol,Any}()
             nw_sol[:cnd][cnd_id] = Dict{Symbol,Any}()
+            nw_sol_post[:cnd][cnd_id] = Dict{Symbol,Any}()
         end
     end
 
@@ -74,6 +81,7 @@ function InitializePowerModel(PowerModel::Type, data::Dict{String,<:Any}; ext = 
         var,
         con,
         sol,
+        sol_post,
         cnw,
         ccnd,
         ext
@@ -146,6 +154,11 @@ sol(pm::AbstractPowerModel, nw::Int, args...) = _sol(pm.sol[:nw][nw], args...)
 sol(pm::AbstractPowerModel, nw::Int, cnd::Int, args...) = _sol(pm.sol[:nw][nw][:cnd][cnd], args...)
 sol(pm::AbstractPowerModel, args...; nw::Int=pm.cnw, cnd::Int=pm.ccnd) = _sol(pm.sol[:nw][nw][:cnd][cnd], args...)
 
+""
+sol_post(pm::AbstractPowerModel, nw::Int, args...) = _sol(pm.sol_post[:nw][nw], args...)
+sol_post(pm::AbstractPowerModel, nw::Int, cnd::Int, args...) = _sol(pm.sol_post[:nw][nw][:cnd][cnd], args...)
+sol_post(pm::AbstractPowerModel, args...; nw::Int=pm.cnw, cnd::Int=pm.ccnd) = _sol(pm.sol_post[:nw][nw][:cnd][cnd], args...)
+
 function _sol(sol::Dict, args...)
     for arg in args
         if haskey(sol, arg)
@@ -156,6 +169,11 @@ function _sol(sol::Dict, args...)
     end
     return sol
 end
+
+
+
+
+
 
 
 ""
